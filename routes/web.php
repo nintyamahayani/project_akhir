@@ -1,0 +1,46 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Livewire\Obats;
+use App\Http\Livewire\Types;
+use App\Http\Livewire\Product;
+use App\Http\Livewire\Cart;
+use App\Http\Livewire\Transactions;
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register web routes for your application. These
+| routes are loaded by the RouteServiceProvider within a group which
+| contains the "web" middleware group. Now create something great!
+|
+*/
+
+Route::get('/', function () {
+    return view('welcome');
+});
+
+
+Route::group(['middleware' => ['auth:sanctum', 'verified', 'accessrole']], function () {
+
+    Route::middleware(['auth:sanctum', 'verified', 'accessrole'])->get('/dashboard', function () {
+        return view('dashboard');
+    })->name('dashboard');
+    Route::get('/obats', obats::class)->name('obats');;
+    Route::get('/product', Product::class)->name('product');;
+    Route::get('/types', Types::class)->name('types');;
+    Route::get('/cart', Cart::class)->name('cart');;
+    Route::get('/transactions', Transactions::class)->name('transactions');
+
+    Route::get('/order', [TransactionController::class, 'order'])->name('pemesanan');
+    Route::post('/order', [TransactionController::class, 'store']);
+    Route::get('/transaction', [TransactionController::class, 'transaction'])->name('transaksi');
+    Route::get('/transaction-detail', [TransactionController::class, 'detail'])->name('detail-transaksi');
+
+    Route::get('/order-tiket/{id}', [TransactionController::class, 'orderTiket'])->name('order-tiket');
+    // Route::get('/tiket', [TransactionController::class, 'tiket'])->name('tiket');
+
+    Route::get('/notification', [TransactionController::class, 'notification'])->name('notifikasi');
+    Route::get('/delete-notification/{id}', [TransactionController::class, 'deleteNotification'])->name('delete-notifikasi');
+});
