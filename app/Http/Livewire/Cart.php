@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Livewire;
+
 use App\Models\Product as ProductModel;
 use App\Models\Transaction;
 use App\Models\ProductTransaction;
@@ -10,6 +11,7 @@ use Livewire\WithPagination;
 use DB;
 use Haruncpi\LaravelIdGenerator\IdGenerator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
 
 class Cart extends Component
 {
@@ -22,13 +24,14 @@ class Cart extends Component
 
 
     //lifecycle hooks
-    public function updatingSearch(){
+    public function updatingSearch()
+    {
         $this->resetPage();
     }
 
     public function render()
     {
-        $products = ProductModel::where('name','like', '%'.$this->search.'%')->orderBy('created_at','DESC')->paginate(8);
+        $products = ProductModel::where('name', 'like', '%' . $this->search . '%')->orderBy('created_at', 'DESC')->paginate(8);
 
         $condition = new \Darryldecode\Cart\CartCondition([
             'name' => 'pajak',
@@ -44,10 +47,10 @@ class Cart extends Component
             return $cart->attributes->get('added_at');
         });
 
-        if(\Cart::isEmpty()){
+        if (\Cart::isEmpty()) {
             $cartData = [];
-        }else{
-            foreach($items as $item){
+        } else {
+            foreach ($items as $item) {
                 $cart[] = [
                     'rowId' => $item->id,
                     'name' => $item->name,
@@ -72,25 +75,26 @@ class Cart extends Component
 
         ];
 
-        return view('livewire.cart',[
+        return view('livewire.cart', [
             'products' => $products,
             'carts' => $cartData,
             'summary' => $summary
         ]);
     }
 
-    public function addItem($id){
-        $rowId = "Cart".$id;
+    public function addItem($id)
+    {
+        $rowId = "Cart" . $id;
         $cart = \Cart::session(Auth()->id())->getContent();
         $checkItem = $cart->whereIn('id', $rowId);
 
         $idProduct = (substr($rowId, 4, 5));
         $product = ProductModel::find($idProduct);
 
-        if($checkItem->isNotEmpty()){
-            if($product->qty == $checkItem[$rowId]->quantity){
+        if ($checkItem->isNotEmpty()) {
+            if ($product->qty == $checkItem[$rowId]->quantity) {
                 session()->flash('error', 'Produk habis');
-            }else{
+            } else {
                 \Cart::session(Auth()->id())->update($rowId, [
                     'quantity' => [
                         'relative' => true,
@@ -98,12 +102,12 @@ class Cart extends Component
                     ]
                 ]);
             }
-        }else{
-            if($product->qty == 0){
+        } else {
+            if ($product->qty == 0) {
                 session()->flash('error', 'Produk habis');
-            }else{
+            } else {
                 \Cart::session(Auth()->id())->add([
-                    'id' => "Cart".$product->id,
+                    'id' => "Cart" . $product->id,
                     'name' => $product->name,
                     'price' => $product->price,
                     'quantity' => 1,
@@ -113,132 +117,136 @@ class Cart extends Component
                 ]);
             }
         }
-
-        }
-
+    }
 
 
-        public function increaseItem($rowId){
-            $idProduct = substr($rowId, 4,5 );
-            $product = ProductModel::find($idProduct);
 
-            $cart = \Cart::session(Auth()->id())->getContent();
+    public function increaseItem($rowId)
+    {
+        $idProduct = substr($rowId, 4, 5);
+        $product = ProductModel::find($idProduct);
 
-            $checkItem = $cart->whereIn('id', $rowId);
+        $cart = \Cart::session(Auth()->id())->getContent();
 
-            if($product->qty == $checkItem[$rowId]->quantity || $product->qty == 0){
+        $checkItem = $cart->whereIn('id', $rowId);
+
+        if ($product->qty == $checkItem[$rowId]->quantity || $product->qty == 0) {
+            session()->flash('error', 'Jumlah item kurang');
+        } else {
+            if ($product->qty == 0) {
                 session()->flash('error', 'Jumlah item kurang');
-            }else{
-                if($product->qty == 0){
-                    session()->flash('error', 'Jumlah item kurang');
-                }else{
-                    \Cart::session(Auth()->id())->update($rowId, [
-                        'quantity' => [
-                            'relative' => true,
-                            'value' => 1
-                        ]
-                    ]);
-                }
+            } else {
+                \Cart::session(Auth()->id())->update($rowId, [
+                    'quantity' => [
+                        'relative' => true,
+                        'value' => 1
+                    ]
+                ]);
             }
         }
+    }
 
-    public function decreaseItem($rowId){
-        $idProduct = substr($rowId, 4,5);
+    public function decreaseItem($rowId)
+    {
+        $idProduct = substr($rowId, 4, 5);
         $product = ProductModel::find($idProduct);
         $cart = \Cart::session(Auth()->id())->getContent();
         $checkItem = $cart->whereIn('id', $rowId);
 
         //Cek apakah item = 1
-        if($checkItem[$rowId]->quantity == 1){
+        if ($checkItem[$rowId]->quantity == 1) {
             $this->removeItem($rowId);
-        }else{
-            \Cart::session(Auth()->id())->update($rowId,[
+        } else {
+            \Cart::session(Auth()->id())->update($rowId, [
                 'quantity' => [
                     'relative' => true,
                     'value' => -1
                 ]
             ]);
-
         }
-
-
     }
 
-    public function removeItem($rowId){
-         \Cart::session(Auth()->id())->remove($rowId);
-
+    public function removeItem($rowId)
+    {
+        \Cart::session(Auth()->id())->remove($rowId);
     }
 
-    public function handleSubmit() {
+    public function handleSubmit()
+    {
         $cartTotal = \Cart::session(Auth()->id())->getTotal();
         $bayar = $this->payment;
         $kembalian = (int) $bayar - (int) $cartTotal;
 
-         //if($kembalian >= 0){
-            DB::beginTransaction();
+        //if($kembalian >= 0){
+        DB::beginTransaction();
 
-            try {
-                $allCart = \Cart::session(Auth()->id())->getContent();
+        try {
+            $allCart = \Cart::session(Auth()->id())->getContent();
 
-                $filterCart = $allCart->map(function ($item) {
-                    return [
-                        'id' => substr($item->id, 4,5 ),
-                        'quantity' => $item->quantity
-                    ];
-                });
+            $filterCart = $allCart->map(function ($item) {
+                return [
+                    'id' => substr($item->id, 4, 5),
+                    'quantity' => $item->quantity
+                ];
+            });
 
-                foreach ($filterCart as $cart) {
-                    $product = ProductModel::find($cart['id']);
+            foreach ($filterCart as $cart) {
+                $product = ProductModel::find($cart['id']);
 
-                    if($product->qty === 0){
-                        return session()->flash('error', 'Jumlah item kurang');
-                    }
-
-                    $product->decrement('qty', $cart['quantity']);
+                if ($product->qty === 0) {
+                    return session()->flash('error', 'Jumlah item kurang');
                 }
 
-                $id = IdGenerator::generate([
-                    'table' => 'transactions',
-                    'length' => 10,
-                    'prefix' => 'INV-',
-                    'field' => 'invoice_number'
-                ]);
-
-                Transaction::create([
-                    'invoice_number' => $id,
-                    'user_id' => Auth()->id(),
-                    'pay' => $cartTotal,
-                    'total' => $cartTotal
-                ]);
-
-                foreach ($filterCart as $cart) {
-                    ProductTransaction::create([
-                        'product_id' => $cart['id'],
-                        'invoice_number' => $id,
-                        'qty' => $cart['quantity']
-                    ]);
-                }
-
-                \Cart::session(Auth()->id())->clear();
-                $this->payment = $cartTotal;
-                session()->flash('OrderS', 'Successfully Ordered');
-                $this->hideModal();
-
-                DB::commit();
-            } catch (\Throwable $th) {
-                DB::rollback();
-                return session()->flash('error', $th);
+                $product->decrement('qty', $cart['quantity']);
             }
+
+            $id = IdGenerator::generate([
+                'table' => 'transactions',
+                'length' => 10,
+                'prefix' => 'INV-',
+                'field' => 'invoice_number'
+            ]);
+
+            Transaction::create([
+                'invoice_number' => $id,
+                'user_id' => Auth()->id(),
+                'pay' => $cartTotal,
+                'total' => $cartTotal
+            ]);
+
+            foreach ($filterCart as $cart) {
+                ProductTransaction::create([
+                    'product_id' => $cart['id'],
+                    'invoice_number' => $id,
+                    'qty' => $cart['quantity']
+                ]);
+            }
+            $response = Http::post('http://localhost:3030/notification', [
+                'reqID' => $id,
+                'title' => 'Pemesanan berhasil',
+                'description' => 'Melakukan pembelian ' . Request()->qty,
+                'name' => Auth::user()->name,
+                'userID' => Auth::user()->id,
+            ]);
+            \Cart::session(Auth()->id())->clear();
+            $this->payment = $cartTotal;
+            session()->flash('OrderS', 'Successfully Ordered');
+            $this->hideModal();
+
+            DB::commit();
+        } catch (\Throwable $th) {
+            DB::rollback();
+            return session()->flash('error', $th);
+        }
         // }
     }
-    public function showModal(){
+    public function showModal()
+    {
         $this->isOpen = true;
     }
 
-    public function hideModal(){
+    public function hideModal()
+    {
         $this->isOpen = false;
     }
 }
-
-
-
